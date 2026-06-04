@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Split QR Upload Drive</title>
+
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+
+<script src="https://accounts.google.com/gsi/client"></script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Segoe UI',sans-serif;
+}
+
+body{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    padding:30px;
+    background:
+        linear-gradient(135deg,#dbeafe,#f0f9ff,#eef2ff);
+}
+
+.container{
+    width:100%;
+    max-width:720px;
+    background:rgba(255,255,255,.85);
+    backdrop-filter:blur(12px);
+    padding:35px;
+    border-radius:24px;
+    border:1px solid rgba(255,255,255,.6);
+
+    box-shadow:
+        0 20px 40px rgba(15,23,42,.08),
+        0 8px 16px rgba(15,23,42,.05);
+
+    animation:fadeUp .5s ease;
+}
+
+.logo{
+    display:block;
+    width: 120px;;
+    margin:0 auto 20px;
+}
+
+h2{
+    text-align:center;
+    margin-bottom:25px;
+    color:#1e293b;
+}
+
+/* Upload Area */
+input[type=file]{
+    width:100%;
+    padding:25px;
+    border:2px dashed #93c5fd;
+    border-radius:18px;
+    background:#f8fbff;
+    cursor:pointer;
+    transition:.3s;
+}
+
+input[type=file]:hover{
+    border-color:#2563eb;
+    background:#eff6ff;
+}
+
+/* Buttons */
+.btn{
+    padding:14px 22px;
+    border:none;
+    border-radius:14px;
+    color:white;
+    font-weight:600;
+    cursor:pointer;
+    transition:.25s;
+    margin-top:15px;
+    margin-right:10px;
+    box-shadow:
+        0 10px 20px rgba(0,0,0,.08);
+}
+
+.btn:hover{
+    transform:translateY(-3px);
+    box-shadow:
+        0 15px 30px rgba(0,0,0,.15);
+}
+
+.btn:active{
+    transform:scale(.97);
+}
+
+.login{
+    background:
+        linear-gradient(135deg,#2563eb,#3b82f6);
+}
+
+.split{
+    background:
+        linear-gradient(135deg,#059669,#10b981);
+}
+
+/* Status */
+.status{
+    margin-top:25px;
+    padding:14px;
+    border-radius:12px;
+    background:#f8fafc;
+    border-left:4px solid #2563eb;
+    color:#334155;
+    font-weight:600;
+}
+
+/* Download Area */
+.download-area{
+    margin-top:20px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.download-link{
+    padding:14px 16px;
+    text-decoration:none;
+    color:#0369a1;
+    background:#ecfeff;
+    border-radius:14px;
+    transition:.25s;
+    border:1px solid #bae6fd;
+}
+
+.download-link:hover{
+    transform:translateX(5px);
+    background:#cffafe;
+}
+
+/* Animation */
+@keyframes fadeUp{
+    from{
+        opacity:0;
+        transform:translateY(20px);
+    }
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+</style>
+</head>
+<body>
+
+
+
+<div class="container">
+
+    <img
+        src="3d.png"
+        alt="Logo"
+        class="logo"
+    >
+
+    <h2>💋😘💋</h2>
+
+    <input
+        type="file"
+        id="pdfFile"
+        accept=".pdf"
+    >
+
+    <button
+        class="btn login"
+        onclick="loginGoogle()">
+        Login Google
+    </button>
+
+    <button
+        class="btn split"
+        onclick="splitPDF()">
+        Split PDF
+    </button>
+
+    <div
+        id="status"
+        class="status">
+        🔒 Chưa đăng nhập
+    </div>
+
+    <div
+        id="downloadArea"
+        class="download-area">
+    </div>
+
+</div>
+
+<script>
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const CLIENT_ID =
+"361907360336-bocqqjqicudr6u51668u2sb55ecr3a8m.apps.googleusercontent.com";
+const FOLDER_ID =
+"1cPt4ihAZYJuCWeCwmJkI7AgS6e-IgfjF";
+
+let accessToken = null;
+
+const statusText =
+document.getElementById("status");
+
+const downloadArea =
+document.getElementById("downloadArea");
+
+function safeName(name){
+
+  return String(name)
+  .replace(/[\\/:*?"<>|]/g,"_")
+  .trim();
+
+}
+
+function loginGoogle(){
+
+  const tokenClient =
+  google.accounts.oauth2.initTokenClient({
+
+    client_id:CLIENT_ID,
+
+    scope:
+    "https://www.googleapis.com/auth/drive.file",
+
+    callback:(resp)=>{
+
+      if(resp.error){
+
+        console.error(resp);
+
+        return;
+
+      }
+
+      accessToken =
+      resp.access_token;
+
+      statusText.innerHTML =
+      "Đăng nhập Google thành công";
+
+    }
+
+  });
+
+  tokenClient.requestAccessToken();
+
+}
+
+async function uploadToDrive(
+pdfBytes,
+fileName
+){
+
+  const metadata = {
+
+    name:fileName,
+
+    parents:[
+      FOLDER_ID
+    ]
+
+  };
+
+  const form =
+  new FormData();
+
+  form.append(
+    "metadata",
+    new Blob(
+      [
+        JSON.stringify(metadata)
+      ],
+      {
+        type:"application/json"
+      }
+    )
+  );
+
+  form.append(
+    "file",
+    new Blob(
+      [pdfBytes],
+      {
+        type:"application/pdf"
+      }
+    )
+  );
+
+  const response =
+  await fetch(
+
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+
+    {
+
+      method:"POST",
+
+      headers:{
+        Authorization:
+        `Bearer ${accessToken}`
+      },
+
+      body:form
+
+    }
+
+  );
+
+  return await response.json();
+
+}
+
+async function scanQR(
+pdf,
+pageNumber
+){
+
+  const page =
+  await pdf.getPage(pageNumber);
+
+  const viewport =
+  page.getViewport({
+    scale:4
+  });
+
+  const canvas =
+  document.createElement(
+    "canvas"
+  );
+
+  const ctx =
+  canvas.getContext("2d");
+
+  canvas.width =
+  viewport.width;
+
+  canvas.height =
+  viewport.height;
+
+  await page.render({
+
+    canvasContext:ctx,
+
+    viewport
+
+  }).promise;
+
+  const imageData =
+  ctx.getImageData(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  const code =
+  jsQR(
+    imageData.data,
+    imageData.width,
+    imageData.height
+  );
+
+  if(code){
+
+    return code.data;
+
+  }
+
+  return null;
+
+}
+
+async function splitPDF(){
+
+  try{
+
+    if(!accessToken){
+
+      alert(
+        "Hãy Login Google trước"
+      );
+
+      return;
+
+    }
+
+    const file =
+    document.getElementById(
+      "pdfFile"
+    ).files[0];
+
+    if(!file){
+
+      alert(
+        "Chọn PDF"
+      );
+
+      return;
+
+    }
+
+    downloadArea.innerHTML =
+    "";
+
+    const buffer =
+    await file.arrayBuffer();
+
+    const pdfJsDoc =
+    await pdfjsLib
+    .getDocument({
+      data:buffer.slice(0)
+    })
+    .promise;
+
+    const originalPdf =
+    await PDFLib.PDFDocument.load(
+      buffer.slice(0)
+    );
+
+    const totalPages =
+    originalPdf.getPageCount();
+
+    for(
+      let i=0;
+      i<totalPages;
+      i++
+    ){
+
+      statusText.innerHTML =
+      `Đang xử lý ${
+        i+1
+      }/${totalPages}`;
+
+      let qrText =
+      await scanQR(
+        pdfJsDoc,
+        i+1
+      );
+
+      if(!qrText){
+
+        qrText =
+        `page-${i+1}`;
+
+      }
+
+      qrText =
+      safeName(
+        qrText
+      );
+
+      const newPdf =
+      await PDFLib.PDFDocument.create();
+
+      const [copiedPage] =
+      await newPdf.copyPages(
+        originalPdf,
+        [i]
+      );
+
+      newPdf.addPage(
+        copiedPage
+      );
+
+      const pdfBytes =
+      await newPdf.save();
+
+      const uploaded =
+      await uploadToDrive(
+        pdfBytes,
+        `${qrText}.pdf`
+      );
+
+      const driveUrl =
+      `https://drive.google.com/file/d/${uploaded.id}/view`;
+
+      const link =
+      document.createElement(
+        "a"
+      );
+
+      link.href =
+      driveUrl;
+
+      link.target =
+      "_blank";
+
+      link.className =
+      "download-link";
+
+      link.innerHTML =
+      `☁️ ${qrText}.pdf`;
+
+      downloadArea.appendChild(
+        link
+      );
+
+    }
+
+    statusText.innerHTML =
+    "Hoàn tất";
+
+  }
+  catch(error){
+
+    console.error(error);
+
+    alert(error.message);
+
+  }
+
+}
+
+</script>
+</body>
+</html>
+
+
